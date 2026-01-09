@@ -39,6 +39,7 @@ export const BoutiqueProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (tg) {
       tg.ready();
       tg.expand();
+      tg.enableClosingConfirmation();
     }
   }, []);
 
@@ -84,11 +85,12 @@ export const BoutiqueProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const confirmOrder = (orderId: string) => {
     setState(prev => {
       const order = prev.orders.find(o => o.id === orderId);
-      if (!order) return prev;
+      if (!order || order.status === 'confirmed') return prev;
 
       const newProducts = prev.products.map(p => {
         const orderedItem = order.items.find(oi => oi.id === p.id);
         if (orderedItem) {
+          // Miqdorni kamaytiramiz
           const remaining = p.quantity - orderedItem.orderQuantity;
           return { ...p, quantity: Math.max(0, remaining) };
         }
