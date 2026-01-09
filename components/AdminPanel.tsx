@@ -34,8 +34,7 @@ const AdminPanel: React.FC = () => {
             <Lock size={32} />
           </div>
           <div>
-            <h2 className="text-2xl font-luxury font-bold text-gray-900">Admin Kirish</h2>
-            <p className="text-gray-400 text-sm mt-1">Parol: netlify123</p>
+            <h2 className="text-2xl font-luxury font-bold text-gray-900 mb-1">Admin Kirish</h2>
           </div>
           
           <div className="space-y-4">
