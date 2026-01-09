@@ -2,12 +2,19 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, Order, PromoCode, AppState } from './types';
 
-// BU YERGA O'ZINGIZNING TELEGRAM ID RAQAMINGIZNI YOZING
-const ADMIN_TELEGRAM_IDS = ['6365371142']; // Masalan: ['5432167', '9876543']
+/**
+ * 1. O'ZINGIZNING ID RAQAMINGIZNI SHU YERGA YOZING!
+ * ID raqamingizni bilmasangiz, dasturni oching va konsolda 
+ * yoki ekrandagi ogohlantirishda chiqqan raqamni nusxalang.
+ */
+const ADMIN_TELEGRAM_IDS = [
+  '6365371142' // O'z ID-ingizni bu yerga qo'shing
+];
 
 interface BoutiqueContextType {
   state: AppState;
   isAdmin: boolean;
+  currentUserId: string | null;
   addProduct: (p: Product) => void;
   deleteProduct: (id: string) => void;
   updateProduct: (p: Product) => void;
@@ -21,6 +28,8 @@ const BoutiqueContext = createContext<BoutiqueContextType | undefined>(undefined
 
 export const BoutiqueProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAdmin, setIsAdmin] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  
   const [state, setState] = useState<AppState>(() => {
     const saved = localStorage.getItem('mavi_boutique_data');
     if (saved) return JSON.parse(saved);
@@ -32,24 +41,48 @@ export const BoutiqueProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   });
 
+  // Role o'zgartirish funksiyasi
+  const setRole = (role: 'user' | 'admin') => {
+    setState(prev => ({ ...prev, currentUser: { role } }));
+  };
+
   useEffect(() => {
-    // Telegram WebApp orqali foydalanuvchini tekshirish
     const tg = (window as any).Telegram?.WebApp;
     const user = tg?.initDataUnsafe?.user;
-    
-    // URL dagi parametrlarni tekshirish (?role=admin bo'lsa)
     const urlParams = new URLSearchParams(window.location.search);
-    const roleParam = urlParams.get('role');
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    let hasAccess = false;
 
-    if (user && ADMIN_TELEGRAM_IDS.includes(user.id.toString())) {
-      setIsAdmin(true);
-      if (roleParam === 'admin') {
-        setRole('admin');
+    if (user) {
+      const uid = user.id.toString();
+      setCurrentUserId(uid);
+      console.log("Sizning Telegram ID-ingiz:", uid);
+
+      if (ADMIN_TELEGRAM_IDS.includes(uid)) {
+        hasAccess = true;
       }
-    } else if (roleParam === 'admin') {
-      // Agar ID mos kelmasa lekin linkda admin bo'lsa, baribir user qilamiz (Xavfsizlik)
-      setIsAdmin(false);
-      setRole('user');
+    } else if (isLocal) {
+      // Localhostda doim adminlikka ruxsat berish
+      hasAccess = true;
+    }
+
+    setIsAdmin(hasAccess);
+
+    // Agar URLda role=admin bo'lsa va ruxsat bo'lsa, avtomat admin panelga o'tkazish
+    if (urlParams.get('role') === 'admin' && hasAccess) {
+      setRole('admin');
+    }
+
+    // Telegram WebApp interfeysini sozlash
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      // Foydalanuvchi ID-sini bilmasa, alert orqali ko'rsatish (faqat bir marta)
+      if (user && !ADMIN_TELEGRAM_IDS.includes(user.id.toString()) && !localStorage.getItem('id_alert_shown')) {
+        console.warn(`Sizning ID: ${user.id}. Admin panel uchun uni store.tsx ga qo'shing.`);
+        localStorage.setItem('id_alert_shown', 'true');
+      }
     }
   }, []);
 
@@ -71,12 +104,6 @@ export const BoutiqueProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const addPromo = (p: PromoCode) => setState(prev => ({ ...prev, promos: [...prev.promos, p] }));
 
-  const setRole = (role: 'user' | 'admin') => {
-    // Faqat admin ruxsati bo'lsa rolni o'zgartirishga ruxsat beramiz
-    if (role === 'admin' && !isAdmin) return;
-    setState(prev => ({ ...prev, currentUser: { role } }));
-  };
-
   const placeOrder = (o: Order) => setState(prev => ({ ...prev, orders: [...prev.orders, o] }));
 
   const confirmOrder = (orderId: string) => {
@@ -91,7 +118,7 @@ export const BoutiqueProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           return { ...p, quantity: Math.max(0, remaining) };
         }
         return p;
-      }).filter(p => p.quantity > 0);
+      });
 
       const newOrders = prev.orders.map(o => o.id === orderId ? { ...o, status: 'confirmed' as const } : o);
 
@@ -101,7 +128,7 @@ export const BoutiqueProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   return (
     <BoutiqueContext.Provider value={{ 
-      state, isAdmin, addProduct, deleteProduct, updateProduct, placeOrder, confirmOrder, addPromo, setRole 
+      state, isAdmin, currentUserId, addProduct, deleteProduct, updateProduct, placeOrder, confirmOrder, addPromo, setRole 
     }}>
       {children}
     </BoutiqueContext.Provider>
