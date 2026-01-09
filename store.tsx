@@ -2,18 +2,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, Order, PromoCode, AppState } from './types';
 
-/**
- * BU YERGA O'Z TELEGRAM ID-INGIZNI YOZING!
- * @userinfobot orqali bilib olishingiz mumkin.
- */
-const ADMIN_TELEGRAM_IDS = [
-  '6365371142' // Sizning ID raqamingiz
-];
-
 interface BoutiqueContextType {
   state: AppState;
-  isAdmin: boolean;
-  currentUserId: string | null;
+  isAuthorized: boolean;
+  authorize: (pass: string) => boolean;
   addProduct: (p: Product) => void;
   deleteProduct: (id: string) => void;
   updateProduct: (p: Product) => void;
@@ -26,21 +18,10 @@ interface BoutiqueContextType {
 const BoutiqueContext = createContext<BoutiqueContextType | undefined>(undefined);
 
 export const BoutiqueProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Telegram WebApp ma'lumotlarini darhol olish
-  const tg = (window as any).Telegram?.WebApp;
-  const user = tg?.initDataUnsafe?.user;
-  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  
-  // Adminlikni tekshirish
-  const checkIsAdmin = () => {
-    if (isLocal) return true; // Localhostda test uchun
-    if (user && ADMIN_TELEGRAM_IDS.includes(user.id.toString())) return true;
-    return false;
-  };
+  const [isAuthorized, setIsAuthorized] = useState(() => {
+    return sessionStorage.getItem('mavi_admin_auth') === 'true';
+  });
 
-  const [isAdmin] = useState<boolean>(checkIsAdmin());
-  const [currentUserId] = useState<string | null>(user?.id.toString() || null);
-  
   const [state, setState] = useState<AppState>(() => {
     const saved = localStorage.getItem('mavi_boutique_data');
     if (saved) return JSON.parse(saved);
@@ -53,10 +34,10 @@ export const BoutiqueProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
 
   useEffect(() => {
+    const tg = (window as any).Telegram?.WebApp;
     if (tg) {
       tg.ready();
       tg.expand();
-      console.log("User ID:", user?.id); // IDni konsolda ko'rish uchun
     }
   }, []);
 
@@ -64,9 +45,16 @@ export const BoutiqueProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem('mavi_boutique_data', JSON.stringify(state));
   }, [state]);
 
+  const authorize = (pass: string) => {
+    if (pass === 'netlify123') {
+      setIsAuthorized(true);
+      sessionStorage.setItem('mavi_admin_auth', 'true');
+      return true;
+    }
+    return false;
+  };
+
   const setRole = (role: 'user' | 'admin') => {
-    // Agar foydalanuvchi admin bo'lmasa, admin rolini o'rnatishga yo'l qo'ymaslik
-    if (role === 'admin' && !isAdmin) return;
     setState(prev => ({ ...prev, currentUser: { role } }));
   };
 
@@ -108,7 +96,7 @@ export const BoutiqueProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   return (
     <BoutiqueContext.Provider value={{ 
-      state, isAdmin, currentUserId, addProduct, deleteProduct, updateProduct, placeOrder, confirmOrder, addPromo, setRole 
+      state, isAuthorized, authorize, addProduct, deleteProduct, updateProduct, placeOrder, confirmOrder, addPromo, setRole 
     }}>
       {children}
     </BoutiqueContext.Provider>
