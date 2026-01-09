@@ -8,7 +8,7 @@ import Navigation from './components/Navigation';
 const Main: React.FC = () => {
   const { state, isAdmin, setRole } = useBoutique();
 
-  // Xavfsizlik tekshiruvi: Agar foydalanuvchi admin bo'lmasa lekin role 'admin' bo'lib qolsa
+  // Xavfsizlik: Foydalanuvchi admin bo'lmasa, uni majburan UserViewga qaytarish
   useEffect(() => {
     if (state.currentUser.role === 'admin' && !isAdmin) {
       setRole('user');
@@ -17,7 +17,8 @@ const Main: React.FC = () => {
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gray-50 relative shadow-2xl">
-      {state.currentUser.role === 'admin' && isAdmin ? (
+      {/* Faqat ikkala shart ham bajarilsa AdminPanelni yuklash */}
+      {state.currentUser.role === 'admin' && isAdmin === true ? (
         <AdminPanel />
       ) : (
         <UserView />
