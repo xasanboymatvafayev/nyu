@@ -1,49 +1,77 @@
-import React, { useState, ChangeEvent } from 'react';
+
+import React, { useState, useRef } from 'react';
 import { useBoutique } from '../store';
-import { 
-  Plus, 
-  Trash2, 
-  Edit3, 
-  Search, 
-  Users, 
-  ShoppingCart, 
-  TrendingUp, 
-  Tag, 
-  ArrowLeft, 
-  Image as ImageIcon, 
-  Check, 
-  X,
-  MapPin
-} from 'lucide-react';
-import { Product, PromoCode, SectionType } from '../types';
+import { Plus, Trash2, Edit3, Search, Users, ShoppingCart, TrendingUp, Tag, ArrowLeft, Image as ImageIcon, Check, X, Upload, Lock, ShieldCheck, LogOut } from 'lucide-react';
+import { Product, PromoCode } from '../types';
 import ProductSlider from './ProductSlider';
 
 const AdminPanel: React.FC = () => {
-  const { state, addProduct, deleteProduct, confirmOrder, updateProduct, addPromo } = useBoutique();
+  const { state, addProduct, deleteProduct, confirmOrder, addPromo, isAuthorized, authorize, logout } = useBoutique();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'orders' | 'promos'>('dashboard');
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [searchId, setSearchId] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [error, setError] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // New Product Form States
   const [newProd, setNewProd] = useState<Partial<Product>>({
-    id: '',
-    name: '',
-    description: '',
     images: [],
     section: 'sotish',
     quantity: 1,
-    price: 0,
-    size: ''
   });
   const [currentStep, setCurrentStep] = useState(1);
-  const [tempImg, setTempImg] = useState('');
 
   // Promo Form
   const [newPromoCode, setNewPromoCode] = useState('');
   const [newDiscount, setNewDiscount] = useState(0);
 
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 animate-fade-in">
+        <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-xl border border-gray-100 text-center space-y-6">
+          <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto text-amber-600">
+            <Lock size={32} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-luxury font-bold text-gray-900">Admin Kirish</h2>
+            <p className="text-gray-400 text-sm mt-1">Parol: netlify123</p>
+          </div>
+          
+          <div className="space-y-4">
+            <input 
+              type="password"
+              placeholder="Parolni kiriting"
+              className={`w-full p-4 bg-gray-50 rounded-2xl border-2 outline-none transition-all text-center text-lg font-bold tracking-widest ${error ? 'border-red-500 animate-shake' : 'border-transparent focus:border-amber-500'}`}
+              value={passwordInput}
+              onChange={(e) => {
+                setPasswordInput(e.target.value);
+                setError(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  if (!authorize(passwordInput)) setError(true);
+                }
+              }}
+            />
+            {error && <p className="text-red-500 text-xs font-bold">Xato parol kiritildi!</p>}
+            <button 
+              onClick={() => {
+                if (!authorize(passwordInput)) setError(true);
+              }}
+              className="w-full bg-black text-white py-4 rounded-2xl font-bold flex items-center justify-center space-x-2 hover:bg-gray-800 transition-colors"
+            >
+              <ShieldCheck size={20} />
+              <span>Tasdiqlash</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const stats = {
-    totalUsers: 1420, // Mock stats
+    totalUsers: 1420,
     totalSales: state.orders.reduce((acc, o) => acc + o.totalPrice, 0),
     activeOrders: state.orders.filter(o => o.status === 'pending').length,
     productCount: state.products.length,
@@ -51,74 +79,38 @@ const AdminPanel: React.FC = () => {
 
   const handleNextStep = () => {
     if (currentStep === 1 && !newProd.id) return alert("ID kiriting");
-    if (currentStep === 2 && newProd.images!.length === 0) return alert("Rasm qo'shing");
+    if (currentStep === 2 && (!newProd.images || newProd.images.length === 0)) return alert("Kamida bitta rasm yuklang");
     if (currentStep === 6 && (!newProd.price || newProd.price <= 0)) return alert("Narx kiriting");
-    setCurrentStep(prev => Math.min(prev + 1, 7));
+    setCurrentStep(prev => prev + 1);
   };
 
-  const handlePrevStep = () => {
-    setCurrentStep(prev => Math.max(prev - 1, 1));
-  };
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
 
-  const addImg = () => {
-    if (!tempImg.trim()) return;
-    setNewProd(prev => ({ 
-      ...prev, 
-      images: [...(prev.images || []), tempImg.trim()] 
-    }));
-    setTempImg('');
-  };
-
-  const removeImg = (index: number) => {
-    setNewProd(prev => ({
-      ...prev,
-      images: (prev.images || []).filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    // File input uchun - bu yerda faqat URLni ko'rsatish uchun
-    // Haqiqiy fayl yuklash uchun server API kerak
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
+    Array.from(files).forEach(file => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setTempImg(reader.result as string);
+        setNewProd(prev => ({
+          ...prev,
+          images: [...(prev.images || []), reader.result as string].slice(0, 4) // Max 4 images
+        }));
       };
       reader.readAsDataURL(file);
-    }
+    });
+  };
+
+  const removeImage = (index: number) => {
+    setNewProd(prev => ({
+      ...prev,
+      images: prev.images?.filter((_, i) => i !== index)
+    }));
   };
 
   const saveProduct = () => {
-    if (!newProd.id || !newProd.name || !newProd.price || newProd.price <= 0) {
-      alert("Barcha maydonlarni to'ldiring");
-      return;
-    }
-
-    const product: Product = {
-      id: newProd.id,
-      name: newProd.name || '',
-      description: newProd.description || '',
-      images: newProd.images || [],
-      section: newProd.section || 'sotish',
-      quantity: newProd.quantity || 1,
-      price: newProd.price,
-      size: newProd.size || '',
-      orderQuantity: 1 // default qiymat
-    };
-
-    addProduct(product);
+    addProduct(newProd as Product);
     setIsAddingProduct(false);
-    setNewProd({ 
-      id: '',
-      name: '',
-      description: '',
-      images: [], 
-      section: 'sotish', 
-      quantity: 1,
-      price: 0,
-      size: ''
-    });
+    setNewProd({ images: [], section: 'sotish', quantity: 1 });
     setCurrentStep(1);
     alert("Koylak muvaffaqiyatli qo'shildi!");
   };
@@ -126,19 +118,8 @@ const AdminPanel: React.FC = () => {
   const renderAddProductWizard = () => (
     <div className="fixed inset-0 bg-white z-[90] overflow-y-auto pb-20">
       <div className="p-6 flex items-center justify-between border-b">
-        <button 
-          onClick={() => {
-            if (currentStep === 1) {
-              setIsAddingProduct(false);
-            } else {
-              handlePrevStep();
-            }
-          }}
-          className="p-2"
-        >
-          <ArrowLeft />
-        </button>
-        <h2 className="font-bold">Yangi koylak qo'shish</h2>
+        <button onClick={() => { setIsAddingProduct(false); setCurrentStep(1); }}><ArrowLeft /></button>
+        <h2 className="font-bold text-gray-900">Yangi koylak qo'shish</h2>
         <span className="text-xs font-bold text-gray-400">Qadam {currentStep}/7</span>
       </div>
 
@@ -146,65 +127,54 @@ const AdminPanel: React.FC = () => {
         {currentStep === 1 && (
           <div className="space-y-4 animate-fade-in">
             <label className="block text-sm font-bold text-gray-700">Mahsulot ID raqami (masalan: 001)</label>
-            <input
+            <input 
               className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-amber-500 outline-none transition-all"
               placeholder="001..." 
               value={newProd.id || ''}
               onChange={e => setNewProd({...newProd, id: e.target.value})}
             />
-            
-            <button onClick={handleNextStep} className="w-full bg-black text-white py-4 rounded-xl font-bold">
-              Keyingisi
-            </button>
+            <button onClick={handleNextStep} className="w-full bg-black text-white py-4 rounded-xl font-bold">Keyingisi</button>
           </div>
         )}
 
         {currentStep === 2 && (
           <div className="space-y-4 animate-fade-in">
-            <label className="block text-sm font-bold text-gray-700">Rasm manzillari (3-4 ta yuboring)</label>
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                className="flex-1 p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-amber-500 outline-none transition-all"
-                placeholder="Rasm URL manzili..." 
-                value={tempImg}
-                onChange={e => setTempImg(e.target.value)}
-              />
-              
-              <button 
-                onClick={addImg} 
-                className="px-4 bg-amber-600 text-white rounded-xl flex items-center justify-center"
-                disabled={!tempImg.trim()}
-              >
-                <Plus size={20} />
-              </button>
-            </div>
+            <label className="block text-sm font-bold text-gray-700">Rasmlarni tanlang (Galereyadan 1-4 ta)</label>
             
-            <div className="grid grid-cols-4 gap-2">
+            <input 
+              type="file" 
+              accept="image/*" 
+              multiple 
+              className="hidden" 
+              ref={fileInputRef}
+              onChange={handleFileChange}
+            />
+
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full h-40 border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center space-y-2 bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors"
+            >
+              <Upload className="text-gray-400" size={32} />
+              <span className="text-xs font-medium text-gray-500">Rasm yuklash uchun bosing</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mt-4">
               {newProd.images?.map((img, i) => (
-                <div key={i} className="relative">
-                  <img 
-                    src={img} 
-                    alt={`Product ${i + 1}`} 
-                    className="aspect-square object-cover rounded-lg border shadow-sm w-full" 
-                  />
-                  <button
-                    onClick={() => removeImg(i)}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
+                <div key={i} className="relative aspect-[3/4] group">
+                  <img src={img} className="w-full h-full object-cover rounded-xl border shadow-sm" />
+                  <button 
+                    onClick={() => removeImage(i)}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full shadow-lg"
                   >
-                    <X size={12} />
+                    <X size={14} />
                   </button>
                 </div>
               ))}
             </div>
-            
-            <button 
-              onClick={handleNextStep} 
-              disabled={newProd.images?.length === 0}
-              className="w-full bg-black text-white py-4 rounded-xl font-bold disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
-              Keyingisi
-            </button>
+
+            {newProd.images && newProd.images.length > 0 && (
+              <button onClick={handleNextStep} className="w-full bg-black text-white py-4 rounded-xl font-bold mt-4">Keyingisi</button>
+            )}
           </div>
         )}
 
@@ -223,9 +193,7 @@ const AdminPanel: React.FC = () => {
               value={newProd.description || ''}
               onChange={e => setNewProd({...newProd, description: e.target.value})}
             />
-            <button onClick={handleNextStep} className="w-full bg-black text-white py-4 rounded-xl font-bold">
-              Keyingisi
-            </button>
+            <button onClick={handleNextStep} className="w-full bg-black text-white py-4 rounded-xl font-bold">Keyingisi</button>
           </div>
         )}
 
@@ -234,10 +202,9 @@ const AdminPanel: React.FC = () => {
             <label className="block text-sm font-bold text-gray-700">Nechta bor?</label>
             <input 
               type="number"
-              min="1"
               className="w-full p-4 bg-gray-50 rounded-2xl border-none"
               value={newProd.quantity || 1}
-              onChange={e => setNewProd({...newProd, quantity: parseInt(e.target.value) || 1})}
+              onChange={e => setNewProd({...newProd, quantity: parseInt(e.target.value)})}
             />
             <label className="block text-sm font-bold text-gray-700">Bo'limni tanlang</label>
             <div className="flex space-x-2">
@@ -254,9 +221,7 @@ const AdminPanel: React.FC = () => {
                 Prokat
               </button>
             </div>
-            <button onClick={handleNextStep} className="w-full bg-black text-white py-4 rounded-xl font-bold">
-              Keyingisi
-            </button>
+            <button onClick={handleNextStep} className="w-full bg-black text-white py-4 rounded-xl font-bold">Keyingisi</button>
           </div>
         )}
 
@@ -269,9 +234,7 @@ const AdminPanel: React.FC = () => {
               value={newProd.size || ''}
               onChange={e => setNewProd({...newProd, size: e.target.value})}
             />
-            <button onClick={handleNextStep} className="w-full bg-black text-white py-4 rounded-xl font-bold">
-              Keyingisi
-            </button>
+            <button onClick={handleNextStep} className="w-full bg-black text-white py-4 rounded-xl font-bold">Keyingisi</button>
           </div>
         )}
 
@@ -282,19 +245,12 @@ const AdminPanel: React.FC = () => {
             </label>
             <input 
               type="number"
-              min="0"
               className="w-full p-4 bg-gray-50 rounded-2xl border-none"
               placeholder="1000000..." 
               value={newProd.price || ''}
-              onChange={e => setNewProd({...newProd, price: parseInt(e.target.value) || 0})}
+              onChange={e => setNewProd({...newProd, price: parseInt(e.target.value)})}
             />
-            <button 
-              onClick={handleNextStep} 
-              disabled={!newProd.price || newProd.price <= 0}
-              className="w-full bg-black text-white py-4 rounded-xl font-bold disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
-              Ko'rib chiqish
-            </button>
+            <button onClick={handleNextStep} className="w-full bg-black text-white py-4 rounded-xl font-bold">Ko'rib chiqish</button>
           </div>
         )}
 
@@ -310,45 +266,22 @@ const AdminPanel: React.FC = () => {
                 </div>
                 <p className="text-xs text-gray-500 line-clamp-2">{newProd.description}</p>
                 <div className="flex justify-between items-end pt-2">
-                  <span className="font-bold text-amber-600 text-lg">
-                    {newProd.price?.toLocaleString()} UZS
-                  </span>
+                  <span className="font-bold text-amber-600 text-lg">{newProd.price?.toLocaleString()} UZS</span>
                   <span className="text-xs font-medium text-gray-400 uppercase">Razmer: {newProd.size}</span>
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                  <span className="text-xs text-gray-500">Bo'lim: {newProd.section}</span>
-                  <span className="text-xs text-gray-500">Zaxira: {newProd.quantity} ta</span>
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
-              <button 
-                onClick={() => { 
-                  setIsAddingProduct(false); 
-                  setCurrentStep(1); 
-                  setNewProd({ 
-                    images: [], 
-                    section: 'sotish', 
-                    quantity: 1 
-                  }); 
-                }} 
-                className="bg-red-50 text-red-600 py-4 rounded-xl text-xs font-bold border border-red-100 flex flex-col items-center"
-              >
+              <button onClick={() => { setIsAddingProduct(false); setCurrentStep(1); }} className="bg-red-50 text-red-600 py-4 rounded-xl text-xs font-bold border border-red-100 flex flex-col items-center">
                 <Trash2 size={18} />
-                <span>Bekor qilish</span>
+                <span>O'chirish</span>
               </button>
-              <button 
-                onClick={() => setCurrentStep(1)} 
-                className="bg-gray-100 text-gray-600 py-4 rounded-xl text-xs font-bold border border-gray-200 flex flex-col items-center"
-              >
+              <button onClick={() => setCurrentStep(1)} className="bg-gray-100 text-gray-600 py-4 rounded-xl text-xs font-bold border border-gray-200 flex flex-col items-center">
                 <Edit3 size={18} />
                 <span>Tahrirlash</span>
               </button>
-              <button 
-                onClick={saveProduct} 
-                className="bg-amber-600 text-white py-4 rounded-xl text-xs font-bold shadow-md flex flex-col items-center"
-              >
+              <button onClick={saveProduct} className="bg-amber-600 text-white py-4 rounded-xl text-xs font-bold shadow-md flex flex-col items-center">
                 <Check size={18} />
                 <span>Tasdiqlash</span>
               </button>
@@ -366,40 +299,29 @@ const AdminPanel: React.FC = () => {
           <h1 className="text-2xl font-bold">Admin Panel</h1>
           <p className="text-xs text-gray-400">Mavi Boutique Management</p>
         </div>
-        <button 
-          onClick={() => setIsAddingProduct(true)}
-          className="bg-black text-white p-2.5 rounded-full shadow-lg hover:bg-gray-800 transition-colors"
-        >
-          <Plus size={24} />
-        </button>
+        <div className="flex items-center space-x-2">
+          <button 
+            onClick={logout}
+            className="p-2.5 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+            title="Chiqish"
+          >
+            <LogOut size={20} />
+          </button>
+          <button 
+            onClick={() => setIsAddingProduct(true)}
+            className="bg-black text-white p-2.5 rounded-full shadow-lg"
+          >
+            <Plus size={24} />
+          </button>
+        </div>
       </header>
 
       {/* Tabs */}
       <div className="flex px-4 py-4 space-x-2 overflow-x-auto no-scrollbar">
-        <button 
-          onClick={() => setActiveTab('dashboard')} 
-          className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${activeTab === 'dashboard' ? 'bg-amber-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
-        >
-          Stats
-        </button>
-        <button 
-          onClick={() => setActiveTab('products')} 
-          className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${activeTab === 'products' ? 'bg-amber-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
-        >
-          Koylaklar
-        </button>
-        <button 
-          onClick={() => setActiveTab('orders')} 
-          className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${activeTab === 'orders' ? 'bg-amber-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
-        >
-          Buyurtmalar
-        </button>
-        <button 
-          onClick={() => setActiveTab('promos')} 
-          className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${activeTab === 'promos' ? 'bg-amber-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
-        >
-          Promokod
-        </button>
+        <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-amber-600 text-white' : 'bg-white text-gray-500'}`}>Stats</button>
+        <button onClick={() => setActiveTab('products')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ${activeTab === 'products' ? 'bg-amber-600 text-white' : 'bg-white text-gray-500'}`}>Koylaklar</button>
+        <button onClick={() => setActiveTab('orders')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ${activeTab === 'orders' ? 'bg-amber-600 text-white' : 'bg-white text-gray-500'}`}>Buyurtmalar</button>
+        <button onClick={() => setActiveTab('promos')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ${activeTab === 'promos' ? 'bg-amber-600 text-white' : 'bg-white text-gray-500'}`}>Promokod</button>
       </div>
 
       <div className="px-4">
@@ -407,7 +329,7 @@ const AdminPanel: React.FC = () => {
           <div className="grid grid-cols-2 gap-4 animate-fade-in">
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
               <Users className="text-blue-500 mb-2" size={24} />
-              <span className="text-2xl font-black">{stats.totalUsers.toLocaleString()}</span>
+              <span className="text-2xl font-black">{stats.totalUsers}</span>
               <span className="text-[10px] uppercase text-gray-400 font-bold">Mijozlar</span>
             </div>
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
@@ -435,21 +357,17 @@ const AdminPanel: React.FC = () => {
               <input 
                 type="text" 
                 placeholder="ID orqali qidirish (masalan: 001)..." 
-                className="w-full pl-10 pr-4 py-3 bg-white rounded-xl border-none shadow-sm text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                className="w-full pl-10 pr-4 py-3 bg-white rounded-xl border-none shadow-sm text-sm"
                 value={searchId}
                 onChange={e => setSearchId(e.target.value)}
               />
             </div>
             <div className="grid grid-cols-1 gap-4">
               {state.products
-                .filter(p => !searchId || p.id.toLowerCase().includes(searchId.toLowerCase()))
+                .filter(p => !searchId || p.id.includes(searchId))
                 .map(p => (
-                <div key={p.id} className="bg-white p-3 rounded-2xl flex items-center space-x-4 shadow-sm border hover:shadow-md transition-shadow">
-                  <img 
-                    src={p.images[0] || '/placeholder.jpg'} 
-                    alt={p.name} 
-                    className="w-16 h-20 object-cover rounded-xl" 
-                  />
+                <div key={p.id} className="bg-white p-3 rounded-2xl flex items-center space-x-4 shadow-sm border">
+                  <img src={p.images[0]} className="w-16 h-20 object-cover rounded-xl" />
                   <div className="flex-1">
                     <div className="flex justify-between">
                       <h4 className="font-bold text-sm">{p.name}</h4>
@@ -457,21 +375,14 @@ const AdminPanel: React.FC = () => {
                     </div>
                     <p className="text-xs text-amber-600 font-bold mt-1">{p.price.toLocaleString()} uzs</p>
                     <div className="flex items-center space-x-4 mt-2">
-                       <span className="text-[10px] text-gray-400 uppercase">Zaxira: {p.quantity}</span>
+                       <span className={`text-[10px] font-bold uppercase ${p.quantity === 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                         Zaxira: {p.quantity}
+                       </span>
                        <span className="text-[10px] text-gray-400 uppercase">Bo'lim: {p.section}</span>
                     </div>
                   </div>
                   <div className="flex flex-col space-y-2">
-                    <button 
-                      onClick={() => {
-                        if (window.confirm(`${p.name} mahsulotini o'chirishni tasdiqlaysizmi?`)) {
-                          deleteProduct(p.id);
-                        }
-                      }} 
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    <button onClick={() => deleteProduct(p.id)} className="p-2 text-red-500"><Trash2 size={18} /></button>
                   </div>
                 </div>
               ))}
@@ -481,12 +392,7 @@ const AdminPanel: React.FC = () => {
 
         {activeTab === 'orders' && (
           <div className="space-y-4 animate-fade-in">
-            {state.orders.length === 0 && (
-              <div className="text-center py-20 text-gray-400">
-                <ShoppingCart className="mx-auto mb-4" size={48} />
-                <p>Buyurtmalar yo'q</p>
-              </div>
-            )}
+            {state.orders.length === 0 && <p className="text-center py-20 text-gray-400">Buyurtmalar yo'q</p>}
             {state.orders.map(o => (
               <div key={o.id} className={`p-5 rounded-2xl border-2 shadow-sm ${o.status === 'confirmed' ? 'bg-green-50 border-green-100' : 'bg-white border-transparent'}`}>
                 <div className="flex justify-between items-start mb-4">
@@ -503,11 +409,7 @@ const AdminPanel: React.FC = () => {
                 <div className="space-y-3 mb-4">
                    {o.items.map((item, idx) => (
                      <div key={idx} className="flex items-center space-x-3 bg-gray-50/50 p-2 rounded-lg">
-                        <img 
-                          src={item.images[0] || '/placeholder.jpg'} 
-                          alt={item.name} 
-                          className="w-10 h-10 rounded object-cover" 
-                        />
+                        <img src={item.images[0]} className="w-10 h-10 rounded object-cover" />
                         <div className="flex-1 text-xs">
                           <p className="font-bold">{item.name} (x{item.orderQuantity})</p>
                           <p className="text-gray-400">ID: {item.id} | {item.size}</p>
@@ -528,12 +430,8 @@ const AdminPanel: React.FC = () => {
 
                 {o.status === 'pending' && (
                   <button 
-                    onClick={() => {
-                      if (window.confirm(`"${o.userName}" buyurtmasini tasdiqlaysizmi?`)) {
-                        confirmOrder(o.id);
-                      }
-                    }}
-                    className="w-full bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 transition-colors"
+                    onClick={() => confirmOrder(o.id)}
+                    className="w-full bg-green-600 text-white py-3 rounded-xl font-bold"
                   >
                     Tasdiqlash & Tovarni kamaytirish
                   </button>
@@ -549,41 +447,26 @@ const AdminPanel: React.FC = () => {
                <h3 className="font-bold mb-4">Yangi Promokod</h3>
                <div className="space-y-4">
                   <input 
-                    className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-amber-500 focus:outline-none" 
+                    className="w-full p-3 bg-gray-50 rounded-xl" 
                     placeholder="KOD (masalan: MAVI20)" 
                     value={newPromoCode}
                     onChange={e => setNewPromoCode(e.target.value.toUpperCase())}
                   />
                   <input 
                     type="number"
-                    min="1"
-                    max="100"
-                    className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-amber-500 focus:outline-none" 
+                    className="w-full p-3 bg-gray-50 rounded-xl" 
                     placeholder="Chegirma % (masalan: 15)" 
                     value={newDiscount || ''}
-                    onChange={e => setNewDiscount(parseInt(e.target.value) || 0)}
+                    onChange={e => setNewDiscount(parseInt(e.target.value))}
                   />
                   <button 
                     onClick={() => {
-                      if (!newPromoCode.trim()) {
-                        alert("Promokod kiritilmagan");
-                        return;
-                      }
-                      if (newDiscount < 1 || newDiscount > 100) {
-                        alert("Chegirma 1-100% oralig'ida bo'lishi kerak");
-                        return;
-                      }
-                      
-                      const promo: PromoCode = { 
-                        code: newPromoCode.trim(), 
-                        discountPercentage: newDiscount 
-                      };
-                      addPromo(promo);
+                      if (!newPromoCode || !newDiscount) return;
+                      addPromo({ code: newPromoCode, discountPercentage: newDiscount });
                       setNewPromoCode('');
                       setNewDiscount(0);
-                      alert("Promokod qo'shildi!");
                     }}
-                    className="w-full bg-black text-white py-3 rounded-xl font-bold hover:bg-gray-800 transition-colors"
+                    className="w-full bg-black text-white py-3 rounded-xl font-bold"
                   >
                     Qo'shish
                   </button>
@@ -592,7 +475,7 @@ const AdminPanel: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-4">
               {state.promos.map((p, i) => (
-                <div key={i} className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex justify-between items-center hover:shadow-sm transition-shadow">
+                <div key={i} className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex justify-between items-center">
                    <div>
                       <div className="text-amber-800 font-black text-lg">{p.code}</div>
                       <div className="text-xs text-amber-600 font-bold">-{p.discountPercentage}%</div>
@@ -609,5 +492,12 @@ const AdminPanel: React.FC = () => {
     </div>
   );
 };
+
+const MapPin: React.FC<{ size?: number, className?: string }> = ({ size = 20, className = "" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+    <circle cx="12" cy="10" r="3"></circle>
+  </svg>
+);
 
 export default AdminPanel;
