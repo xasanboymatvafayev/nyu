@@ -6,6 +6,7 @@ interface BoutiqueContextType {
   state: AppState;
   isAuthorized: boolean;
   authorize: (pass: string) => boolean;
+  logout: () => void;
   addProduct: (p: Product) => void;
   deleteProduct: (id: string) => void;
   updateProduct: (p: Product) => void;
@@ -54,6 +55,12 @@ export const BoutiqueProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return false;
   };
 
+  const logout = () => {
+    setIsAuthorized(false);
+    sessionStorage.removeItem('mavi_admin_auth');
+    setState(prev => ({ ...prev, currentUser: { role: 'user' } }));
+  };
+
   const setRole = (role: 'user' | 'admin') => {
     setState(prev => ({ ...prev, currentUser: { role } }));
   };
@@ -96,7 +103,7 @@ export const BoutiqueProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   return (
     <BoutiqueContext.Provider value={{ 
-      state, isAuthorized, authorize, addProduct, deleteProduct, updateProduct, placeOrder, confirmOrder, addPromo, setRole 
+      state, isAuthorized, authorize, logout, addProduct, deleteProduct, updateProduct, placeOrder, confirmOrder, addPromo, setRole 
     }}>
       {children}
     </BoutiqueContext.Provider>
