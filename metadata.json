@@ -1,0 +1,8 @@
+
+{
+  "name": "Mavi Boutique - Premium Mini App",
+  "description": "A high-end boutique management system with User Shop and Admin Panel for sales and rentals.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
