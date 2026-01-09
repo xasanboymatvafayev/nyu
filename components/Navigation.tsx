@@ -16,8 +16,8 @@ const Navigation: React.FC = () => {
         <span className="text-[10px] font-bold uppercase tracking-wider">Do'kon</span>
       </button>
 
-      {/* FAQAT ADMIN BO'LSA TUGMANI KO'RSATISH */}
-      {isAdmin && (
+      {/* FAQAT HAQIQIY ADMINLARGA KO'RSATISH */}
+      {isAdmin === true && (
         <button 
           onClick={() => setRole('admin')}
           className={`flex flex-col items-center space-y-1 transition-all ${state.currentUser.role === 'admin' ? 'text-amber-600 scale-110' : 'text-gray-400 opacity-60'}`}
