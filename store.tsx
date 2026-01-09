@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, Order, PromoCode, AppState } from './types';
 
 // BU YERGA O'ZINGIZNING TELEGRAM ID RAQAMINGIZNI YOZING
-const ADMIN_TELEGRAM_IDS = ['123456789']; // Masalan: ['5432167', '9876543']
+const ADMIN_TELEGRAM_IDS = ['6365371142']; // Masalan: ['5432167', '9876543']
 
 interface BoutiqueContextType {
   state: AppState;
