@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GoogleGenAI } from "@google/genai";
+// Build xatolarini oldini olish uchun direct import
+import { GoogleGenAI } from "https://esm.sh/@google/genai@1.35.0";
 import { 
   Plus, 
   Trash2, 
@@ -14,8 +15,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 
-// Database Key for LocalStorage
-const DB_KEY = 'smart_notes_db_v1';
+const DB_KEY = 'smart_notes_v2_db';
 
 interface Note {
   id: string;
@@ -30,48 +30,58 @@ const App = () => {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  // Initial Load from Database (LocalStorage)
+  // 1. Ma'lumotlarni yuklash (Faqat bir marta)
   useEffect(() => {
-    const savedNotes = localStorage.getItem(DB_KEY);
-    if (savedNotes) {
+    const saved = localStorage.getItem(DB_KEY);
+    if (saved) {
       try {
-        const parsed = JSON.parse(savedNotes);
-        setNotes(parsed);
-        if (parsed.length > 0) setSelectedNoteId(parsed[0].id);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setNotes(parsed);
+          if (parsed.length > 0) setSelectedNoteId(parsed[0].id);
+        }
       } catch (e) {
-        console.error("Failed to parse notes from DB", e);
+        console.error("DB yuklashda xato:", e);
       }
     }
+    setIsInitialLoad(false);
   }, []);
 
-  // Save to Database whenever notes change
+  // 2. Ma'lumotlarni saqlash (Har bir o'zgarishda)
   useEffect(() => {
-    localStorage.setItem(DB_KEY, JSON.stringify(notes));
-  }, [notes]);
+    if (!isInitialLoad) {
+      localStorage.setItem(DB_KEY, JSON.stringify(notes));
+    }
+  }, [notes, isInitialLoad]);
 
-  const createNote = () => {
+  const createNote = useCallback(() => {
     const newNote: Note = {
       id: Date.now().toString(),
       title: 'Yangi eslatma',
       content: '',
       updatedAt: Date.now(),
     };
-    setNotes([newNote, ...notes]);
+    setNotes(prev => [newNote, ...prev]);
     setSelectedNoteId(newNote.id);
-  };
+  }, []);
 
-  const deleteNote = (id: string) => {
-    const filtered = notes.filter(n => n.id !== id);
-    setNotes(filtered);
-    if (selectedNoteId === id) {
-      setSelectedNoteId(filtered.length > 0 ? filtered[0].id : null);
-    }
-  };
+  const deleteNote = useCallback((id: string) => {
+    setNotes(prev => {
+      const filtered = prev.filter(n => n.id !== id);
+      if (selectedNoteId === id) {
+        setSelectedNoteId(filtered.length > 0 ? filtered[0].id : null);
+      }
+      return filtered;
+    });
+  }, [selectedNoteId]);
 
-  const updateNote = (id: string, updates: Partial<Note>) => {
-    setNotes(notes.map(n => n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n));
-  };
+  const updateNote = useCallback((id: string, updates: Partial<Note>) => {
+    setNotes(prev => prev.map(n => 
+      n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n
+    ));
+  }, []);
 
   const selectedNote = notes.find(n => n.id === selectedNoteId);
 
@@ -79,23 +89,23 @@ const App = () => {
     if (!selectedNote || !selectedNote.content) return;
     
     setIsAiLoading(true);
-    setStatusMsg('AI matnni qayta ishlamoqda...');
+    setStatusMsg('AI ishlamoqda...');
 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Quyidagi matnni tahrirlang, xatolarini to'g'irlang va yanada tushunarli hamda professional ko'rinishga keltiring. Faqat natijaviy matnni qaytaring: \n\n${selectedNote.content}`,
+        contents: `Quyidagi matnni tahrirlang va chiroyli holatga keltiring: \n\n${selectedNote.content}`,
       });
 
       const improvedText = response.text;
       if (improvedText) {
         updateNote(selectedNote.id, { content: improvedText.trim() });
-        setStatusMsg('Muvaffaqiyatli yakunlandi!');
+        setStatusMsg('Tayyor!');
       }
     } catch (error) {
       console.error("AI Error:", error);
-      setStatusMsg('Xatolik yuz berdi. Qaytadan urinib ko\'ring.');
+      setStatusMsg('Xatolik yuz berdi.');
     } finally {
       setIsAiLoading(false);
       setTimeout(() => setStatusMsg(''), 3000);
@@ -110,7 +120,7 @@ const App = () => {
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans antialiased overflow-hidden">
       {/* Sidebar */}
-      <div className="w-80 bg-white border-r border-slate-200 flex flex-col shadow-sm">
+      <div className="w-80 bg-white border-r border-slate-200 flex flex-col shadow-sm shrink-0">
         <div className="p-6 border-b border-slate-100">
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-blue-500 bg-clip-text text-transparent flex items-center gap-2">
@@ -168,10 +178,10 @@ const App = () => {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col bg-white">
+      <div className="flex-1 flex flex-col bg-white min-w-0">
         {selectedNote ? (
           <>
-            <div className="h-20 border-b border-slate-100 flex items-center justify-between px-8 bg-white/80 backdrop-blur-md sticky top-0 z-10">
+            <div className="h-20 border-b border-slate-100 flex items-center justify-between px-8 bg-white/80 backdrop-blur-md sticky top-0 z-10 shrink-0">
               <input 
                 type="text" 
                 value={selectedNote.title}
@@ -182,7 +192,7 @@ const App = () => {
               
               <div className="flex items-center gap-3">
                 {statusMsg && (
-                  <span className="text-xs font-medium text-emerald-600 animate-fade-in flex items-center gap-1 bg-emerald-50 px-3 py-1 rounded-full">
+                  <span className="text-xs font-medium text-emerald-600 flex items-center gap-1 bg-emerald-50 px-3 py-1 rounded-full">
                     <CheckCircle2 size={12} /> {statusMsg}
                   </span>
                 )}
@@ -197,13 +207,12 @@ const App = () => {
                   ) : (
                     <Sparkles size={18} />
                   )}
-                  AI Improve
+                  AI Smart Edit
                 </button>
 
                 <button
                   onClick={() => deleteNote(selectedNote.id)}
                   className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                  title="O'chirish"
                 >
                   <Trash2 size={20} />
                 </button>
@@ -219,9 +228,9 @@ const App = () => {
               />
             </div>
             
-            <div className="p-4 border-t border-slate-100 text-xs text-slate-400 flex justify-between items-center px-8">
+            <div className="p-4 border-t border-slate-100 text-xs text-slate-400 flex justify-between items-center px-8 shrink-0">
               <span>Oxirgi tahrir: {new Date(selectedNote.updatedAt).toLocaleString()}</span>
-              <span className="flex items-center gap-1"><Save size={12} /> Ma'lumotlar bazada saqlandi</span>
+              <span className="flex items-center gap-1 text-emerald-500 font-medium"><Save size={12} /> Saqlandi</span>
             </div>
           </>
         ) : (
@@ -238,5 +247,7 @@ const App = () => {
 };
 
 const container = document.getElementById('root');
-const root = createRoot(container!);
-root.render(<App />);
+if (container) {
+  const root = createRoot(container);
+  root.render(<App />);
+}
